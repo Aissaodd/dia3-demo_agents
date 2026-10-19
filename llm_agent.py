@@ -12,7 +12,6 @@ def read_file(file_path):
         return file.read()
 
 
-
 def ask_llm(question):
     
     client = Groq(api_key=os.environ["GROQ_KEY"])
