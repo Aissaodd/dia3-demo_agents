@@ -6,6 +6,13 @@ import os
 load_dotenv()
 
 
+
+def read_file(file_path):
+    with open(file_path, "r") as file:
+        return file.read()
+
+
+
 def ask_llm(question):
     
     client = Groq(api_key=os.environ["GROQ_KEY"])
@@ -14,16 +21,14 @@ def ask_llm(question):
         messages=[
             {
                 "role": "system",
-                "content": "Tu es un assistant sympa"
+                "content": read_file(file_path="./context.txt")
             },
-
             {
                 "role": "user",
                 "content": question,
             }
         ],
-
-        model="qwen/qwen3.6-27b",
+        model="openai/gpt-oss-120b",
         include_reasoning=False,
     )
 
