@@ -7,8 +7,8 @@ from groq import Groq
 TEXT_MODEL = "openai/gpt-oss-120b"
 VISION_MODEL = "qwen/qwen3.8-27b"
 
-STT_MODEL = "whisper-large-v3-turbo"  # ou "whisper-large-v3" (plus précis, ~3x plus cher)
-STT_MAX_BYTES = 25 * 1024 * 1024      # 25 Mo (free tier), 100 Mo (dev tier)
+STT_MODEL = "whisper-large-v3-turbo" 
+STT_MAX_BYTES = 25 * 1024 * 1024      
 STT_PROMPT = "Conversation en français avec Jarvis, aussi appelé Barbe-Quasar."
 
 
@@ -39,7 +39,6 @@ class ConversationAgent:
     def update_conversation_history(self, role, content):
         self.conversation_history.append({"role": role, "content": content})
 
-    # ---------- Voix ----------
 
     def transcribe_audio(self, audio_file):
         audio_bytes = audio_file.getvalue()
@@ -48,16 +47,15 @@ class ConversationAgent:
             raise ValueError("Enregistrement trop volumineux (25 Mo max).")
 
         transcription = self.groq_client.audio.transcriptions.create(
-            file=("audio.wav", audio_bytes),  # Streamlit enregistre en WAV
+            file=("audio.wav", audio_bytes),  
             model=STT_MODEL,
-            language="fr",                    # ISO-639-1 : améliore précision et latence
-            prompt=STT_PROMPT,                # guide l'orthographe (224 tokens max)
+            language="fr",                    
+            prompt=STT_PROMPT,               
             response_format="json",
-            temperature=0.0,                  # valeur recommandée par Groq
+            temperature=0.0,                
         )
         return transcription.text.strip()
 
-    # ---------- Texte + images ----------
 
     def _history_has_images(self):
         return any(isinstance(m["content"], list) for m in self.conversation_history)
@@ -82,8 +80,8 @@ class ConversationAgent:
         if self._history_has_images():
             kwargs = {
                 "model": VISION_MODEL,
-                "reasoning_format": "hidden",     # cache la réflexion de Qwen
-                "max_completion_tokens": 4096,    # laisse de la place à la réponse
+                "reasoning_format": "hidden",    
+                "max_completion_tokens": 4096,    
             }
         else:
             kwargs = {"model": TEXT_MODEL, "include_reasoning": False}
@@ -98,7 +96,7 @@ class ConversationAgent:
             raise
 
         message = completion.choices[0].message
-        print("DEBUG content:", repr(message.content))  # à retirer ensuite
+        print("DEBUG content:", repr(message.content)) 
         print("DEBUG finish_reason:", completion.choices[0].finish_reason)
 
         response = (message.content or "").strip()

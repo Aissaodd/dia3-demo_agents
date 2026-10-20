@@ -19,7 +19,7 @@ class UserInterface:
                 content = message["content"]
                 if isinstance(content, str):
                     st.markdown(content)
-                else:  # message multimodal (texte + images)
+                else: 
                     for part in content:
                         if part["type"] == "text":
                             st.markdown(part["text"])
@@ -37,7 +37,6 @@ class UserInterface:
         if prompt:
             text = prompt.text or ""
 
-            # 1) Transcription de la voix (si enregistrement)
             if prompt.audio:
                 with st.spinner("Transcription..."):
                     try:
@@ -49,7 +48,6 @@ class UserInterface:
                         transcription = ""
                 text = f"{text} {transcription}".strip()
 
-            # 2) Envoi au LLM (texte et/ou images)
             if text or prompt.files:
                 with st.spinner("Jarvis réfléchit..."):
                     try:
@@ -59,7 +57,6 @@ class UserInterface:
                     except Exception as e:
                         st.error(f"Erreur Groq : {e}")
 
-        # L'historique est affiché à chaque rerun
         self.show_discussion_history()
 
 
