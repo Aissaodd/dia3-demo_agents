@@ -1,43 +1,116 @@
-from groq import Groq
-
-from dotenv import load_dotenv
+import base64
 import os
 
-load_dotenv()
+from dotenv import load_dotenv
+from groq import Groq
+
+TEXT_MODEL = "openai/gpt-oss-120b"
+VISION_MODEL = "qwen/qwen3.8-27b"
+
+STT_MODEL = "whisper-large-v3-turbo"  # ou "whisper-large-v3" (plus précis, ~3x plus cher)
+STT_MAX_BYTES = 25 * 1024 * 1024      # 25 Mo (free tier), 100 Mo (dev tier)
+STT_PROMPT = "Conversation en français avec Jarvis, aussi appelé Barbe-Quasar."
 
 
-
-def read_file(file_path):
-    with open(file_path, "r") as file:
-        return file.read()
-
-
-def ask_llm(question):
-    
-    client = Groq(api_key=os.environ["GROQ_KEY"])
-
-    chat_completion = client.chat.completions.create(
-        messages=[
+class ConversationAgent:
+    def __init__(self):
+        load_dotenv()
+        self.groq_client = Groq(api_key=os.environ["GROQ_KEY"])
+        self.conversation_history = [
             {
                 "role": "system",
-                "content": read_file(file_path="./context.txt")
-            },
-            {
-                "role": "user",
-                "content": question,
+                "content": self.read_file(file_path="./context.txt"),
             }
-        ],
-        model="openai/gpt-oss-120b",
-        include_reasoning=False,
-    )
+        ]
 
+    @staticmethod
+    def read_file(file_path):
+        with open(file_path, "r", encoding="utf-8") as file:
+            return file.read()
 
-    response = chat_completion.choices[0].message.content
-    return response
+    @staticmethod
+    def image_to_data_url(image_file):
+        b64 = base64.b64encode(image_file.getvalue()).decode("utf-8")
+        return f"data:{image_file.type};base64,{b64}"
+
+    def get_conversation_history(self):
+        return self.conversation_history[1:]
+
+    def update_conversation_history(self, role, content):
+        self.conversation_history.append({"role": role, "content": content})
+
+    # ---------- Voix ----------
+
+    def transcribe_audio(self, audio_file):
+        audio_bytes = audio_file.getvalue()
+
+        if len(audio_bytes) > STT_MAX_BYTES:
+            raise ValueError("Enregistrement trop volumineux (25 Mo max).")
+
+        transcription = self.groq_client.audio.transcriptions.create(
+            file=("audio.wav", audio_bytes),  # Streamlit enregistre en WAV
+            model=STT_MODEL,
+            language="fr",                    # ISO-639-1 : améliore précision et latence
+            prompt=STT_PROMPT,                # guide l'orthographe (224 tokens max)
+            response_format="json",
+            temperature=0.0,                  # valeur recommandée par Groq
+        )
+        return transcription.text.strip()
+
+    # ---------- Texte + images ----------
+
+    def _history_has_images(self):
+        return any(isinstance(m["content"], list) for m in self.conversation_history)
+
+    def ask_llm(self, text_interaction, images=None):
+        if images:
+            content = [
+                {"type": "text", "text": text_interaction or "Décris cette image."}
+            ]
+            for image in images:
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": self.image_to_data_url(image)},
+                    }
+                )
+        else:
+            content = text_interaction
+
+        self.update_conversation_history(role="user", content=content)
+
+        if self._history_has_images():
+            kwargs = {
+                "model": VISION_MODEL,
+                "reasoning_format": "hidden",     # cache la réflexion de Qwen
+                "max_completion_tokens": 4096,    # laisse de la place à la réponse
+            }
+        else:
+            kwargs = {"model": TEXT_MODEL, "include_reasoning": False}
+
+        try:
+            completion = self.groq_client.chat.completions.create(
+                messages=self.conversation_history,
+                **kwargs,
+            )
+        except Exception:
+            self.conversation_history.pop()
+            raise
+
+        message = completion.choices[0].message
+        print("DEBUG content:", repr(message.content))  # à retirer ensuite
+        print("DEBUG finish_reason:", completion.choices[0].finish_reason)
+
+        response = (message.content or "").strip()
+        if not response:
+            response = "(Le modèle n'a renvoyé aucune réponse, réessaie.)"
+
+        self.update_conversation_history(role="assistant", content=response)
+        return response
 
 
 if __name__ == "__main__":
+    agent = ConversationAgent()
     question = input("Pose ta question :\n")
-    response = ask_llm(question)
     print("\n")
-    print(response)
+    print(agent.ask_llm(question))
