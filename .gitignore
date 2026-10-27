@@ -218,7 +218,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+<<<<<<< HEAD
 
 # Jarvis : base des missions, logs et fichiers produits par les agents
 data/
 workspace/
+=======
+>>>>>>> 8827120f738a8dd46ee6195dab250ae160c8833d

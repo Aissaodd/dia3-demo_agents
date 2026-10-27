@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # JARVIS NEXUS
 
 Un assistant personnel multi-agents. Vous lui parlez dans un chat ; quand votre
@@ -131,3 +132,6 @@ hypothèses. Une mission identique déjà réussie est signalée au planificateu
 ```powershell
 python -m pytest tests -q        # 60 tests, hors ligne, aucun appel payant
 ```
+=======
+# dia3-demo_agents
+>>>>>>> 8827120f738a8dd46ee6195dab250ae160c8833d
