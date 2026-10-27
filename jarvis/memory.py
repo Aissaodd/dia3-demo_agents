@@ -133,8 +133,15 @@ class MissionStore:
                 c.execute("UPDATE missions SET llm_calls = llm_calls + ? WHERE id = ?", (n, mission_id))
 
     def request_cancel(self, mission_id: int):
+        m = self.get_mission(mission_id)
+        if m is None:
+            raise KeyError(f"mission {mission_id} introuvable")
         self.update_mission(mission_id, cancel_requested=1)
         self.log(mission_id, "cancel", "Annulation demandée")
+        # Aucun worker vivant : personne ne lira la demande, on annule tout de suite.
+        if m["status"] not in ("done", "failed", "cancelled") and not self.is_live(m):
+            self.update_mission(mission_id, status="cancelled")
+            self.log(mission_id, "cancelled", "Mission annulée (aucun worker actif)")
 
     def cancel_requested(self, mission_id: int) -> bool:
         m = self.get_mission(mission_id)

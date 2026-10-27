@@ -18,7 +18,7 @@ class ConversationAgent:
 
     @staticmethod
     def read_file(file_path):
-        with open(file_path, "r") as file:
+        with open(file_path, "r", encoding="utf-8") as file:
             return file.read()
 
 
@@ -41,42 +41,16 @@ class ConversationAgent:
 
         response = self.client.chat.completions.create(
             messages=self.conversation_history,
-            model="deepseek-chat",
+            model=os.environ.get("JARVIS_MODEL", "deepseek-flash"),
         ).choices[0].message.content
 
 
         self.update_conversation_history(role="assistant", content=response)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        return response
 
 
 if __name__ == "__main__":
     question = input("Pose ta question :\n")
-    response = ask_llm(question)
+    response = ConversationAgent().ask_llm(question)
     print("\n")
     print(response)

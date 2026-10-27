@@ -184,7 +184,8 @@ def verify(llm: LLM, step: dict, output: str) -> Verdict:
         if isinstance(ok, str):
             ok = ok.strip().lower() in ("true", "oui", "yes", "1")
         return Verdict(bool(ok), str(data.get("reason") or ""))
-    return Verdict(True, "vérification non concluante (réponse illisible), résultat accepté")
+    # Un verdict illisible n'est PAS une validation : on refuse, l'étape sera refaite.
+    return Verdict(False, "vérification non concluante (réponse du vérificateur illisible)")
 
 
 SYNTH_ROLE = """\

@@ -35,48 +35,9 @@ class UserInterface:
 			self.show_discussion_history()
 
 
-
 if __name__ == "__main__":
 	user_interface_object = UserInterface()
 	user_interface_object.run()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 	# response = ask_llm(user_input)

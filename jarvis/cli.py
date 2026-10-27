@@ -83,8 +83,15 @@ def main(argv=None):
     if args.cmd in ("mission", "run"):
         from jarvis.orchestrator import Orchestrator
 
-        orch = Orchestrator(cfg, store)
-        mid = orch.submit(" ".join(args.objective)) if args.cmd == "mission" else args.id
+        mid = store.create_mission(" ".join(args.objective)) if args.cmd == "mission" else args.id
+        try:
+            orch = Orchestrator(cfg, store)
+        except Exception as exc:
+            # Sans ça, une clé manquante laissait la mission « en attente » pour toujours.
+            store.update_mission(mid, status="failed", error=f"Démarrage impossible : {exc}")
+            store.log(mid, "error", f"Démarrage impossible : {exc}")
+            print(f"Démarrage impossible : {exc}")
+            return 1
         print(f"Mission #{mid} en cours ({cfg.llm_provider})…", flush=True)
         try:
             orch.run(mid, force=getattr(args, "force", False))
