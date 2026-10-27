@@ -5,7 +5,8 @@ URL et noms de modèles vérifiés sur la documentation officielle le 2026-10-27
 - DeepSeek : https://api.deepseek.com, modèles deepseek-flash et deepseek-v4-pro
   (deepseek-chat et deepseek-reasoner ont été retirés le 2026-07-24) ;
 - Groq : https://api.groq.com/openai/v1, ex. openai/gpt-oss-120b ;
-- Anthropic : https://api.anthropic.com/v1/messages.
+- Anthropic : https://api.anthropic.com/v1/messages ;
+- Gemini : https://generativelanguage.googleapis.com/v1beta/openai/, ex. gemini-flash-latest.
 """
 
 import json
@@ -31,12 +32,13 @@ class OpenAICompatLLM(LLM):
     key_names: tuple[str, ...] = ()
     retired: dict[str, str] = {}
 
-    def __init__(self, model: str = "", **kw):
+    def __init__(self, model: str = "", api_key: str = "", key_index: int = 1, **kw):
         super().__init__(model, **kw)
         from openai import OpenAI
 
+        self.key_index = key_index
         # max_retries=0 : c'est notre socle qui décide quoi réessayer.
-        self.client = OpenAI(api_key=_key(*self.key_names), base_url=self.base_url,
+        self.client = OpenAI(api_key=api_key or _key(*self.key_names), base_url=self.base_url,
                              timeout=self.timeout, max_retries=0)
 
     def _complete(self, messages, role=None):
@@ -73,6 +75,13 @@ class GroqLLM(OpenAICompatLLM):
     default_model = "openai/gpt-oss-120b"
 
 
+class GeminiLLM(OpenAICompatLLM):
+    name = "gemini"
+    base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    key_names = ("GEMINI_API_KEY", "GEMINI_KEY", "GOOGLE_API_KEY")
+    default_model = "gemini-flash-latest"
+
+
 class AnthropicLLM(LLM):
     """API Messages d'Anthropic, appelée avec httpx (pas de SDK supplémentaire)."""
 
@@ -81,9 +90,10 @@ class AnthropicLLM(LLM):
     default_model = "claude-sonnet-5-5"
     url = "https://api.anthropic.com/v1/messages"
 
-    def __init__(self, model: str = "", max_tokens: int = 4096, **kw):
+    def __init__(self, model: str = "", max_tokens: int = 4096, api_key: str = "", key_index: int = 1, **kw):
         super().__init__(model, **kw)
-        self.key = _key("ANTHROPIC_API_KEY")
+        self.key = api_key or _key("ANTHROPIC_API_KEY")
+        self.key_index = key_index
         self.max_tokens = max_tokens
 
     def _complete(self, messages, role=None):

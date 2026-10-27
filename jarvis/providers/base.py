@@ -18,10 +18,12 @@ from dataclasses import dataclass
 class LLMError(Exception):
     """Erreur d'appel de modèle. ``transient`` = réessayer peut marcher."""
 
-    def __init__(self, message: str, transient: bool = False, retry_after: float | None = None):
+    def __init__(self, message: str, transient: bool = False, retry_after: float | None = None,
+                 status: int | None = None):
         super().__init__(redact(message))
         self.transient = transient
         self.retry_after = retry_after
+        self.status = status
 
 
 class BudgetExceeded(LLMError):
@@ -70,6 +72,8 @@ def load_prices() -> dict[str, tuple[float, float]]:
 _SECRET_PATTERNS = [
     re.compile(r"\bsk-[A-Za-z0-9_\-]{12,}"),          # DeepSeek, OpenAI, Anthropic (sk-ant-…)
     re.compile(r"\bgsk_[A-Za-z0-9]{12,}"),            # Groq
+    re.compile(r"\bAIza[A-Za-z0-9_\-]{20,}"),         # Google / Gemini
+    re.compile(r"\bAQ\.[A-Za-z0-9_\-]{20,}"),         # Google / Gemini (nouveau format)
     re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._\-]{12,}"),
     re.compile(r"(?i)\b(api[_-]?key|token|secret|password|mot de passe)\s*[=:]\s*\S{6,}"),
 ]
@@ -165,9 +169,68 @@ def http_error(status: int | None, message: str, retry_after=None) -> LLMError:
     except (TypeError, ValueError):
         ra = None
     hints = {401: "clé refusée", 402: "solde insuffisant", 403: "accès refusé", 404: "modèle ou URL inconnus",
-             429: "limite de débit atteinte"}
+             429: "limite de débit atteinte", 500: "erreur interne du fournisseur",
+             502: "fournisseur indisponible", 503: "fournisseur surchargé, réessaie dans un moment",
+             504: "fournisseur trop lent"}
     prefix = f"HTTP {status}" + (f" ({hints[status]})" if status in hints else "") if status else "réseau"
-    return LLMError(f"{prefix} : {message[:400]}", transient=transient, retry_after=ra)
+    return LLMError(f"{prefix} : {message[:400]}", transient=transient, retry_after=ra, status=status)
+
+
+# Clé refusée, solde épuisé, accès refusé : une autre clé peut marcher.
+_SWITCH_STATUSES = (401, 402, 403)
+
+
+class FallbackLLM(LLM):
+    """Essaie plusieurs fournisseurs (ou plusieurs clés) dans l'ordre.
+
+    On passe au suivant seulement si l'erreur peut venir de la clé ou du
+    serveur (surcharge, limite de débit, clé refusée, solde épuisé). Une
+    requête invalide ou un budget dépassé remontent tout de suite.
+    """
+
+    def __init__(self, links: list[LLM]):
+        if not links:
+            raise LLMError("aucun fournisseur utilisable")
+        self.links = list(links)
+
+    @property
+    def name(self) -> str:
+        return self.links[0].name
+
+    @property
+    def model(self) -> str:
+        return self.links[0].model
+
+    @property
+    def paid(self) -> bool:
+        return any(l.paid for l in self.links)
+
+    @property
+    def calls(self) -> int:
+        return sum(l.calls for l in self.links)
+
+    @property
+    def label(self) -> str:
+        return " puis ".join(l.label + (f" (clé {l.key_index})" if getattr(l, "key_index", 1) > 1 else "")
+                          for l in self.links)
+
+    def complete(self, messages, role=None) -> str:
+        return self.complete_with_usage(messages, role)[0]
+
+    def complete_with_usage(self, messages, role=None):
+        errors = []
+        for link in self.links:
+            try:
+                return link.complete_with_usage(messages, role)
+            except BudgetExceeded:
+                raise
+            except LLMError as exc:
+                if not (exc.transient or exc.status in _SWITCH_STATUSES):
+                    raise
+                errors.append(f"{link.label} : {exc}")
+        if len(errors) == 1:
+            raise LLMError(errors[0], transient=True)
+        raise LLMError("tous les fournisseurs ont échoué — " + " | ".join(errors), transient=True)
 
 
 def extract_json(text: str):

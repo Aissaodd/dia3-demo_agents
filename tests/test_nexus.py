@@ -86,6 +86,37 @@ def test_retries_only_transient_errors():
     assert perm.calls == 1   # une erreur définitive n'est jamais réessayée
 
 
+def test_fallback_switches_key_or_provider_on_overload(monkeypatch):
+    from jarvis.providers import FallbackLLM, build_chain, provider_keys
+
+    def echo(name, *items):
+        e = EchoLLM(list(items))
+        e.name = name
+        return e
+
+    chain = FallbackLLM([echo("a", http_error(503, "surchargé")), echo("b", "réponse de b")])
+    assert chain.complete([{"role": "user", "content": "x"}]) == "réponse de b"
+    # Requête invalide : changer de clé n'y changerait rien, l'erreur remonte.
+    bad = FallbackLLM([echo("a", http_error(400, "requête invalide")), echo("b", "jamais")])
+    with pytest.raises(LLMError, match="400"):
+        bad.complete([{"role": "user", "content": "x"}])
+    both = FallbackLLM([echo("a", http_error(503, "un")), echo("b", http_error(429, "deux"))])
+    with pytest.raises(LLMError, match="tous les fournisseurs"):
+        both.complete([{"role": "user", "content": "x"}])
+
+    for var in ("GEMINI_API_KEY", "GEMINI_KEY", "GOOGLE_API_KEY", "DEEPSEEK_KEY", "DEEPSEEK_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "fausse-cle-numero-1")
+    monkeypatch.setenv("GEMINI_API_KEY_2", "fausse-cle-numero-2")
+    monkeypatch.setenv("DEEPSEEK_KEY", "fausse-cle-deepseek")
+    assert provider_keys("gemini") == ["fausse-cle-numero-1", "fausse-cle-numero-2"]
+    cfg = Config(llm_provider="gemini", fallback=["deepseek", "groq"])   # groq sans clé : ignoré
+    built = build_chain(cfg, "gemini")
+    assert [(l.name, l.key_index) for l in built.links] == [("gemini", 1), ("gemini", 2), ("deepseek", 1)]
+    assert built.links[0].retries == 1 and built.links[-1].retries == cfg.llm_retries
+    assert any("groq ignoré" in w for w in cfg.warnings())
+
+
 def test_unknown_price_is_not_invented():
     class P(LLM):
         name, paid = "p", True

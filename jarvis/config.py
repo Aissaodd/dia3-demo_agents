@@ -50,6 +50,8 @@ class Config:
     llm_provider: str = "deepseek"
     llm_model: str = ""                 # vide = modèle par défaut du fournisseur
     role_models: dict[str, str] = field(default_factory=dict)
+    # Fournisseurs de secours, dans l'ordre (« deepseek », « groq:openai/gpt-oss-120b »…).
+    fallback: list[str] = field(default_factory=list)
     llm_timeout: float = 120.0          # secondes par appel de modèle
     db_path: Path = PROJECT_DIR / "data" / "jarvis.db"
     # Seul dossier que les outils fichiers peuvent lire ou écrire.
@@ -59,6 +61,7 @@ class Config:
     max_step_attempts: int = 3          # tentatives par étape avant échec
     max_tool_calls: int = 6             # appels d'outils max par tentative
     retry_delay: float = 2.0            # secondes, doublées à chaque tentative
+    llm_retries: int = 4                # réessais d'un appel de modèle sur erreur passagère (503, 429…)
     lease_seconds: int = 180            # verrou d'exécution d'une mission (renouvelé à chaque appel)
     max_parallel: int = 3               # étapes indépendantes exécutées en même temps
     step_timeout: float = 600.0         # secondes max par tentative d'étape
@@ -80,6 +83,7 @@ class Config:
         cfg.llm_provider = os.environ.get("JARVIS_LLM", cfg.llm_provider).strip().lower()
         cfg.llm_model = os.environ.get("JARVIS_MODEL", cfg.llm_model).strip()
         cfg.role_models = _role_models()
+        cfg.fallback = [s.strip() for s in os.environ.get("JARVIS_FALLBACK", "").split(",") if s.strip()]
         if os.environ.get("JARVIS_DB"):
             cfg.db_path = Path(os.environ["JARVIS_DB"])
         if os.environ.get("JARVIS_WORKSPACE"):
@@ -89,6 +93,7 @@ class Config:
         cfg.max_step_attempts = max(1, _int("JARVIS_MAX_ATTEMPTS", cfg.max_step_attempts))
         cfg.max_tool_calls = max(0, _int("JARVIS_MAX_TOOL_CALLS", cfg.max_tool_calls))
         cfg.retry_delay = _float("JARVIS_RETRY_DELAY", cfg.retry_delay)
+        cfg.llm_retries = max(0, _int("JARVIS_LLM_RETRIES", cfg.llm_retries))
         cfg.max_parallel = max(1, _int("JARVIS_MAX_PARALLEL", cfg.max_parallel))
         cfg.step_timeout = _float("JARVIS_STEP_TIMEOUT", cfg.step_timeout)
         cfg.mission_timeout = _float("JARVIS_MISSION_TIMEOUT", cfg.mission_timeout)
@@ -122,6 +127,14 @@ class Config:
             if prov == "deepseek" and model in DeepSeekLLM.retired:
                 out.append(f"[{role}] le modèle {model} a été retiré par DeepSeek le 2026-07-24 : "
                            f"utilise {DeepSeekLLM.retired[model]}")
+        for spec in self.fallback:
+            prov, _ = parse_spec(spec, "?")
+            if prov not in PROVIDERS:
+                out.append(f"[secours] fournisseur inconnu : {spec}")
+                continue
+            keys = PROVIDER_KEYS.get(prov, ())
+            if keys and not any(os.environ.get(k) for k in keys):
+                out.append(f"[secours] {prov} ignoré : clé manquante ({' ou '.join(keys)})")
         if self.approval_mode == "jamais":
             out.append("Approbations désactivées (JARVIS_APPROVAL=jamais) : les écrasements de fichiers "
                        "se feront sans confirmation.")

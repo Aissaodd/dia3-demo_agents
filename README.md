@@ -40,9 +40,12 @@ installé : `JARVIS_LLM=claude`.
   `.env` les utilise encore, `doctor` le signale : passez à `deepseek-flash`.
 - Un modèle par rôle, explicitement : `JARVIS_MODEL_PLANNER=deepseek:deepseek-v4-pro`,
   `JARVIS_MODEL_VERIFIER=groq:openai/gpt-oss-120b`, `JARVIS_MODEL_AGENT_CODEUR=…`.
-- **Aucun basculement automatique** d'un fournisseur vers un autre : chaque appel
-  enregistre le fournisseur et le modèle réellement utilisés (page Configuration,
-  `python -m jarvis usage`).
+- **Clés de secours** : si le fournisseur est surchargé (503), limité (429), refuse la
+  clé ou n'a plus de solde, Jarvis essaie ses autres clés (`GEMINI_API_KEY_2`,
+  `GEMINI_API_KEY_3`… jusqu'à `_9`), puis les fournisseurs de `JARVIS_FALLBACK`
+  (ex. `JARVIS_FALLBACK=deepseek,groq`), dans l'ordre. Sans ces réglages, aucun
+  basculement. Chaque appel enregistre le fournisseur et le modèle réellement utilisés
+  (page Configuration, `python -m jarvis usage`).
 - `python -m jarvis test-provider deepseek` fait **un** appel réel (quelques jetons).
 - Coûts : calculés seulement quand le prix du modèle est connu (prix officiels relevés
   le 27/10/2026, tarif le plus haut retenu). Sinon le coût est affiché « inconnu », jamais
