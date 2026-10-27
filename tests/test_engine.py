@@ -69,7 +69,7 @@ def test_rejected_then_retried_with_feedback(tmp_path):
 def test_fallback_agent_then_failure_then_resume(tmp_path):
     orch, store, llm = make(tmp_path, [
         plan_of(("Étape", "chercheur")),
-        LLMError("réseau"),                          # tentative 1 : erreur
+        LLMError("réseau", transient=True),          # tentative 1 : erreur passagère
         {"action": "final", "answer": "a"}, {"ok": False, "reason": "faux"},  # tentative 2
         {"action": "final", "answer": "b"}, {"ok": False, "reason": "faux"},  # tentative 3 (secours)
     ])
