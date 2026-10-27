@@ -1,0 +1,40 @@
+# Thème JARVIS NEXUS : sombre, cyan, lisible. Lu quand on lance depuis la racine du projet
+# (python -m jarvis dashboard le fait).
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "dark"
+primaryColor = "#22d3ee"
+backgroundColor = "#070b14"
+secondaryBackgroundColor = "#0f1726"
+codeBackgroundColor = "#0b1220"
+textColor = "#d7e3f4"
+linkColor = "#67e8f9"
+borderColor = "#1e2b40"
+showWidgetBorder = true
+showSidebarBorder = true
+baseRadius = "8px"
+buttonRadius = "8px"
+font = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "'Orbitron':https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+codeFontSize = "13px"
+headingFontWeights = [600, 600, 500, 500, 500, 500]
+linkUnderline = false
+chartCategoricalColors = ["#22d3ee", "#a78bfa", "#34d399", "#fbbf24", "#f87171", "#60a5fa"]
+blueColor = "#38bdf8"
+greenColor = "#34d399"
+yellowColor = "#fbbf24"
+redColor = "#f87171"
+violetColor = "#a78bfa"
+orangeColor = "#fb923c"
+
+[theme.sidebar]
+backgroundColor = "#0b1220"
+secondaryBackgroundColor = "#111b2e"
+borderColor = "#1e2b40"

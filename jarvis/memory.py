@@ -245,20 +245,30 @@ class MissionStore:
                        conversation_id: int | None = None) -> int:
         """Crée une mission. Avec ``source_key``, un second appel identique renvoie la même
         mission au lieu d'en créer une autre (protection contre les doubles exécutions)."""
+        return self.create_mission_once(objective, source_key, parent_id, conversation_id)[0]
+
+    def create_mission_once(self, objective: str, source_key: str | None = None, parent_id: int | None = None,
+                            conversation_id: int | None = None) -> tuple[int, bool]:
+        """Comme ``create_mission``, mais dit aussi si la mission vient d'être créée."""
         now = time.time()
-        with self._conn() as c:
-            if source_key:
-                row = c.execute("SELECT id FROM missions WHERE source_key = ?", (source_key,)).fetchone()
-                if row:
-                    return row["id"]
-            cur = c.execute(
-                """INSERT INTO missions (objective, created_at, updated_at, source_key, parent_id, conversation_id)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (objective.strip(), now, now, source_key, parent_id, conversation_id),
-            )
-            mid = cur.lastrowid
+        try:
+            with self._conn() as c:
+                c.execute("BEGIN IMMEDIATE")
+                if source_key:
+                    row = c.execute("SELECT id FROM missions WHERE source_key = ?", (source_key,)).fetchone()
+                    if row:
+                        return row["id"], False
+                cur = c.execute(
+                    """INSERT INTO missions (objective, created_at, updated_at, source_key, parent_id,
+                                            conversation_id) VALUES (?, ?, ?, ?, ?, ?)""",
+                    (objective.strip(), now, now, source_key, parent_id, conversation_id),
+                )
+                mid = cur.lastrowid
+        except sqlite3.IntegrityError:  # course perdue contre un autre processus : même mission
+            with self._conn() as c:
+                return c.execute("SELECT id FROM missions WHERE source_key = ?", (source_key,)).fetchone()["id"], False
         self.log(mid, "mission", "Mission créée", {"objective": objective, "parent": parent_id})
-        return mid
+        return mid, True
 
     def get_mission(self, mission_id: int) -> dict | None:
         with self._conn() as c:
@@ -660,17 +670,33 @@ class MissionStore:
                     client_key: str | None = None) -> tuple[int, bool]:
         """Ajoute un message. Renvoie (id, créé). Avec ``client_key``, un message déjà
         reçu (rafraîchissement de la page, double clic) n'est pas ajouté une seconde fois."""
+        try:
+            with self._conn() as c:
+                c.execute("BEGIN IMMEDIATE")
+                if client_key:
+                    row = c.execute("SELECT id FROM messages WHERE client_key = ?", (client_key,)).fetchone()
+                    if row:
+                        return row["id"], False
+                cur = c.execute(
+                    """INSERT INTO messages (conversation_id, role, content, mission_id, client_key, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (conv_id, role, content, mission_id, client_key, time.time()),
+                )
+                return cur.lastrowid, True
+        except sqlite3.IntegrityError:
+            with self._conn() as c:
+                return c.execute("SELECT id FROM messages WHERE client_key = ?", (client_key,)).fetchone()["id"], False
+
+    def get_message(self, message_id: int) -> dict | None:
         with self._conn() as c:
-            if client_key:
-                row = c.execute("SELECT id FROM messages WHERE client_key = ?", (client_key,)).fetchone()
-                if row:
-                    return row["id"], False
-            cur = c.execute(
-                """INSERT INTO messages (conversation_id, role, content, mission_id, client_key, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (conv_id, role, content, mission_id, client_key, time.time()),
-            )
-            return cur.lastrowid, True
+            row = c.execute("SELECT * FROM messages WHERE id = ?", (message_id,)).fetchone()
+        return dict(row) if row else None
+
+    def last_conversation_mission(self, conv_id: int) -> dict | None:
+        with self._conn() as c:
+            row = c.execute("SELECT * FROM missions WHERE conversation_id = ? ORDER BY id DESC LIMIT 1",
+                            (conv_id,)).fetchone()
+        return dict(row) if row else None
 
     def set_message_mission(self, message_id: int, mission_id: int):
         with self._conn() as c:
