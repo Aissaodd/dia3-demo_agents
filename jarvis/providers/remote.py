@@ -90,7 +90,16 @@ class AnthropicLLM(LLM):
         import httpx
 
         system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
-        convo = [{"role": m["role"], "content": m["content"]} for m in messages if m["role"] != "system"]
+        convo: list[dict] = []
+        for m in messages:
+            if m["role"] == "system":
+                continue
+            if convo and convo[-1]["role"] == m["role"]:   # l'API veut des tours alternés
+                convo[-1]["content"] += "\n\n" + m["content"]
+            else:
+                convo.append({"role": m["role"], "content": m["content"]})
+        if convo and convo[0]["role"] != "user":
+            convo.insert(0, {"role": "user", "content": "(début de la conversation)"})
         body = {"model": self.model, "max_tokens": self.max_tokens, "messages": convo}
         if system:
             body["system"] = system

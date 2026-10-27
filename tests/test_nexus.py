@@ -406,3 +406,25 @@ def test_calculator_explains_caret():
     with pytest.raises(ToolError, match=r"\*\*"):
         calculate("2^10")
     assert calculate("2**10") == "1024"
+
+
+def test_anthropic_payload_alternates_roles(monkeypatch):
+    import httpx
+
+    from jarvis.providers.remote import AnthropicLLM
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-0000000000000000")
+    sent = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        sent.update(json)
+        return httpx.Response(200, json={"content": [{"type": "text", "text": "ok"}],
+                                         "usage": {"input_tokens": 3, "output_tokens": 1}})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    text, usage = AnthropicLLM("claude-sonnet-5-5").complete_with_usage([
+        {"role": "system", "content": "S"}, {"role": "assistant", "content": "a"},
+        {"role": "user", "content": "u1"}, {"role": "user", "content": "u2"}])
+    assert text == "ok" and usage.input_tokens == 3 and sent["system"] == "S"
+    roles = [m["role"] for m in sent["messages"]]
+    assert roles[0] == "user" and all(a != b for a, b in zip(roles, roles[1:]))
